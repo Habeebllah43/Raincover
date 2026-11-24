@@ -35,7 +35,7 @@ UserError = rain_cover.gl.vm.UserError
 def _make_cover(contract, gl, peril="drought", threshold=1000,
                 start=PERIOD_START, end=PERIOD_END,
                 payout=5 * ONE_GEN, premium=ONE_GEN, value=5 * ONE_GEN,
-                sender=UNDERWRITER, lat=12.0, lon=8.52,
+                sender=UNDERWRITER, lat="12.0", lon="8.52",
                 location="Kano, Nigeria"):
     set_sender(gl, sender, value)
     cover_id = contract.create_cover(
@@ -82,6 +82,35 @@ def test_format_coord_negative():
 def test_format_coord_max():
     assert m._format_coord(180000000) == "180.000000"
     assert m._format_coord(-90000000) == "-90.000000"
+
+
+def test_parse_coord_values():
+    assert m._parse_coord("12.0", "latitude") == 12000000
+    assert m._parse_coord("12.000000", "latitude") == 12000000
+    assert m._parse_coord("8.52", "longitude") == 8520000
+    assert m._parse_coord("-33.8688", "latitude") == -33868800
+    assert m._parse_coord("  8.52  ", "longitude") == 8520000
+    assert m._parse_coord("90", "latitude") == 90000000
+    assert m._parse_coord("-180.000000", "longitude") == -180000000
+
+
+def test_parse_coord_rounds_seventh_place():
+    assert m._parse_coord("12.0000004", "latitude") == 12000000
+    assert m._parse_coord("12.0000005", "latitude") == 12000001
+    assert m._parse_coord("-33.8688005", "latitude") == -33868801
+
+
+def test_parse_coord_rejects_non_numbers():
+    for bad in ("abc", "nan", "inf", "1e2", "12.0.0", "", " ", "12,5"):
+        with pytest.raises(UserError, match="latitude must be a number"):
+            m._parse_coord(bad, "latitude")
+
+
+def test_parse_coord_rejects_out_of_range():
+    with pytest.raises(UserError, match="latitude must be between"):
+        m._parse_coord("90.000001", "latitude")
+    with pytest.raises(UserError, match="longitude must be between"):
+        m._parse_coord("-180.000001", "longitude")
 
 
 def test_date_str_known_dates():
@@ -553,7 +582,7 @@ def test_create_cover_happy_path(contract, gl):
 
 
 def test_create_cover_negative_coordinates(contract, gl):
-    cover_id = _make_cover(contract, gl, lat=-33.8688, lon=151.2093,
+    cover_id = _make_cover(contract, gl, lat="-33.8688", lon="151.2093",
                            location="Sydney, Australia")
     cover = contract.get_cover(cover_id)
     assert cover["latitude"] == "-33.868800"
@@ -607,26 +636,26 @@ def test_create_cover_each_peril_allowed(contract, gl):
 
 def test_create_cover_latitude_out_of_range(contract, gl):
     with pytest.raises(UserError, match="latitude must be between"):
-        _make_cover(contract, gl, lat=91.0)
+        _make_cover(contract, gl, lat="91")
     with pytest.raises(UserError, match="latitude must be between"):
-        _make_cover(contract, gl, lat=-91.0)
+        _make_cover(contract, gl, lat="-91")
 
 
 def test_create_cover_longitude_out_of_range(contract, gl):
     with pytest.raises(UserError, match="longitude must be between"):
-        _make_cover(contract, gl, lon=181.0)
+        _make_cover(contract, gl, lon="181")
     with pytest.raises(UserError, match="longitude must be between"):
-        _make_cover(contract, gl, lon=-181.0)
+        _make_cover(contract, gl, lon="-181")
 
 
 def test_create_cover_nan_latitude(contract, gl):
     with pytest.raises(UserError, match="latitude must be a number"):
-        _make_cover(contract, gl, lat=float("nan"))
+        _make_cover(contract, gl, lat="nan")
 
 
 def test_create_cover_nan_longitude(contract, gl):
     with pytest.raises(UserError, match="longitude must be a number"):
-        _make_cover(contract, gl, lon=float("nan"))
+        _make_cover(contract, gl, lon="nan")
 
 
 def test_create_cover_empty_location(contract, gl):
@@ -646,10 +675,10 @@ def test_create_cover_value_must_equal_payout(contract, gl):
 
 
 def test_create_cover_latitude_boundary_allowed(contract, gl):
-    for lat in (-90.0, 90.0):
+    for lat in ("-90", "90"):
         cover_id = _make_cover(contract, gl, lat=lat)
         assert contract.get_cover(cover_id)["latitude"] in ("-90.000000", "90.000000")
-    for lon in (-180.0, 180.0):
+    for lon in ("-180", "180"):
         cover_id = _make_cover(contract, gl, lon=lon)
         assert contract.get_cover(cover_id)["longitude"] in ("-180.000000", "180.000000")
 
@@ -1116,7 +1145,7 @@ def test_lifecycle_kano_january_2025_drought(contract, gl, monkeypatch):
     calls = record_transfers(monkeypatch)
     cover_id = _make_cover(
         contract, gl,
-        location="Kano, Nigeria", lat=12.0, lon=8.52,
+        location="Kano, Nigeria", lat="12.0", lon="8.52",
         peril="drought", threshold=1000,
         start=1735689600, end=1738367999,
     )
@@ -1148,7 +1177,7 @@ def test_lifecycle_kano_april_2025_heat(contract, gl, monkeypatch):
     ]
     cover_id = _make_cover(
         contract, gl,
-        location="Kano, Nigeria", lat=12.0, lon=8.52,
+        location="Kano, Nigeria", lat="12.0", lon="8.52",
         peril="heat", threshold=4000,
         start=1743465600, end=1746057599,
     )

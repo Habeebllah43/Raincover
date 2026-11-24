@@ -111,6 +111,43 @@ def _format_coord(micro):
     return "%s%d.%06d" % (sign, magnitude // 1000000, magnitude % 1000000)
 
 
+def _parse_coord(text, name):
+    """Parse a decimal coordinate string to integer microdegrees.
+
+    Coordinates arrive as strings ("12.0", "-33.8688") because
+    GenVM's schema extractor rejects float parameters, so no float
+    is accepted here. Only string/int math is used — no floats
+    anywhere. The 7th decimal place rounds, half away from zero.
+    Raises gl.vm.UserError on anything that is not a plain decimal
+    number, or outside the coordinate's range.
+    """
+    limit = 90000000 if name == "latitude" else 180000000
+    between = "latitude must be between -90 and 90" if name == "latitude" else "longitude must be between -180 and 180"
+    if not isinstance(text, str):
+        raise gl.vm.UserError("%s must be a number" % name)
+    s = text.strip()
+    if not s:
+        raise gl.vm.UserError("%s must be a number" % name)
+    sign = 1
+    if s[0] == "-":
+        sign = -1
+        s = s[1:]
+    elif s[0] == "+":
+        s = s[1:]
+    if not s or s.count(".") > 1:
+        raise gl.vm.UserError("%s must be a number" % name)
+    whole, _dot, frac = s.partition(".")
+    if not whole.isdigit() or (frac and not frac.isdigit()):
+        raise gl.vm.UserError("%s must be a number" % name)
+    micro = int(whole) * 1000000 + int((frac + "000000")[:6] or "0")
+    if len(frac) > 6 and frac[6] >= "5":
+        micro += 1
+    micro *= sign
+    if micro < -limit or micro > limit:
+        raise gl.vm.UserError(between)
+    return micro
+
+
 def _date_str(ts):
     """Calendar date (YYYY-MM-DD, UTC) of a Unix timestamp."""
     dt = datetime.fromtimestamp(ts, tz=timezone.utc)
@@ -396,16 +433,14 @@ def _errors_agree(a, b):
 
 
 def _validate_create_cover(location_name, latitude, longitude, peril, threshold, period_start, period_end, payout_amount, premium):
-    """Business-rule checks for create_cover. Raises gl.vm.UserError."""
+    """Business-rule checks for create_cover. Raises gl.vm.UserError.
+    latitude/longitude arrive here as integer microdegrees (see
+    _parse_coord)."""
     if not location_name or not location_name.strip():
         raise gl.vm.UserError("location_name must not be empty")
-    if latitude != latitude:
-        raise gl.vm.UserError("latitude must be a number")
-    if longitude != longitude:
-        raise gl.vm.UserError("longitude must be a number")
-    if latitude < -90 or latitude > 90:
+    if latitude < -90000000 or latitude > 90000000:
         raise gl.vm.UserError("latitude must be between -90 and 90")
-    if longitude < -180 or longitude > 180:
+    if longitude < -180000000 or longitude > 180000000:
         raise gl.vm.UserError("longitude must be between -180 and 180")
     if peril not in PERILS:
         raise gl.vm.UserError("peril must be one of drought, excess_rain, heat")
@@ -605,8 +640,8 @@ class RainCover(gl.Contract):
     def create_cover(
         self,
         location_name: str,
-        latitude: float,
-        longitude: float,
+        latitude: str,
+        longitude: str,
         peril: str,
         threshold: u256,
         period_start: u256,
@@ -620,13 +655,18 @@ class RainCover(gl.Contract):
         degrees C): 1000 means 10.00 mm, 4000 means 40.00 C. The
         contract stores the Open-Meteo archive URL it will settle
         from, built deterministically from the coordinates and period.
-        The period may be in the past (for a demo) or the future."""
+        Coordinates are decimal strings (e.g. "12.000000") — GenVM's
+        schema extractor rejects float parameters, so no float is
+        accepted here. The period may be in the past (for a demo) or
+        the future."""
         underwriter = gl.message.sender_address
         value = gl.message.value
+        latitude_micro = _parse_coord(latitude, "latitude")
+        longitude_micro = _parse_coord(longitude, "longitude")
         _validate_create_cover(
             location_name,
-            latitude,
-            longitude,
+            latitude_micro,
+            longitude_micro,
             peril,
             threshold,
             period_start,
@@ -636,8 +676,8 @@ class RainCover(gl.Contract):
         )
         if value != payout_amount:
             raise gl.vm.UserError("attached value must equal payout_amount")
-        latitude_str = _format_coord(int(round(latitude * 1000000)))
-        longitude_str = _format_coord(int(round(longitude * 1000000)))
+        latitude_str = _format_coord(latitude_micro)
+        longitude_str = _format_coord(longitude_micro)
         cover_id = self.counters["cover_count"] + 1
         self.counters["cover_count"] = cover_id
         cover = Cover(

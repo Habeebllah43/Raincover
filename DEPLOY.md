@@ -64,7 +64,8 @@ python3 -m pytest tests/ -q
    - **Create:** from account A, call `create_cover` attaching
      5 GEN (the `value` field):
      - location_name: `Kano, Nigeria`
-     - latitude: `12.0`, longitude: `8.52`
+     - latitude: `"12.000000"`, longitude: `"8.520000"` (decimal
+       strings — GenVM rejects float parameters)
      - peril: `drought`
      - threshold: `1000` (10.00 mm, in hundredths)
      - period_start: `1735689600` (2025-01-01T00:00:00Z)

@@ -293,8 +293,8 @@ def cover(contract, gl):
     gl.message.value = 5 * ONE_GEN
     cover_id = contract.create_cover(
         "Kano, Nigeria",
-        12.0,
-        8.52,
+        "12.0",
+        "8.52",
         "drought",
         1000,
         PERIOD_START,

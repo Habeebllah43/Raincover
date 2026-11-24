@@ -9,7 +9,7 @@ API while writing this file — nothing here is invented.
 | Field | Value |
 |---|---|
 | Location | Kano, Nigeria |
-| Latitude / longitude | 12.0 / 8.52 |
+| Latitude / longitude | `"12.000000"` / `"8.520000"` (decimal strings — GenVM rejects float parameters) |
 | Peril | `drought` |
 | Threshold | `1000` (= 10.00 mm) |
 | Period | 1–31 January 2025 |
